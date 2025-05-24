@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng Lọc Ảnh</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Hide file input visually but keep it accessible */
+        .hidden-input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border-width: 0;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col items-center space-y-6">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-6 text-center">
+            <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+                Ứng dụng Lọc Ảnh
+            </span>
+        </h1>
+
+        <div class="w-full flex flex-col items-center space-y-4">
+            <label for="imageUpload" class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Tải ảnh lên
+            </label>
+            <input type="file" id="imageUpload" accept="image/*" class="hidden-input">
+            <span id="fileName" class="text-gray-600 text-sm">Chưa có ảnh nào được chọn.</span>
+        </div>
+
+        <div class="w-full flex flex-col md:flex-row justify-center items-center md:space-x-8 space-y-8 md:space-y-0 mt-8">
+            <div class="flex flex-col items-center">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">Ảnh Gốc</h2>
+                <canvas id="originalCanvas" class="border-2 border-gray-300 rounded-lg shadow-lg max-w-full h-auto"></canvas>
+            </div>
+            <div class="flex flex-col items-center">
+                <h2 class="text-xl font-semibold text-gray-700 mb-2">Ảnh Đã Lọc</h2>
+                <canvas id="filteredCanvas" class="border-2 border-gray-300 rounded-lg shadow-lg max-w-full h-auto"></canvas>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 w-full mt-8">
+            <button id="grayscaleBtn" class="filter-btn bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Chuyển xám
+            </button>
+            <button id="histogramEqBtn" class="filter-btn bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Cân bằng lược đồ xám
+            </button>
+            <button id="meanFilterBtn" class="filter-btn bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Lọc Trung bình (3x3)
+            </button>
+            <button id="medianFilterBtn" class="filter-btn bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Lọc Trung vị (3x3)
+            </button>
+            <button id="gaussianFilterBtn" class="filter-btn bg-purple-500 hover:bg-purple-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105">
+                Lọc Gaussian (3x3)
+            </button>
+            <button id="resetBtn" class="filter-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 col-span-2 sm:col-span-3 lg:col-span-1 lg:col-start-3">
+                Đặt lại
+            </button>
+        </div>
+
+        <div id="messageBox" class="hidden bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded-lg relative mt-4 w-full max-w-md" role="alert">
+            <strong class="font-bold">Thông báo:</strong>
+            <span id="messageText" class="block sm:inline"></span>
+            <span class="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer" onclick="document.getElementById('messageBox').classList.add('hidden')">
+                <svg class="fill-current h-6 w-6 text-blue-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.103l-2.651 3.746a1.2 1.2 0 1 1-1.697-1.697l3.746-2.651-3.746-2.651a1.2 1.2 0 1 1 1.697-1.697L10 8.897l2.651-3.746a1.2 1.2 0 1 1 1.697 1.697L11.103 10l3.746 2.651a1.2 1.2 0 0 1 0 1.698z"/></svg>
+            </span>
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const fileNameSpan = document.getElementById('fileName');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const filteredCanvas = document.getElementById('filteredCanvas');
+        const originalCtx = originalCanvas.getContext('2d');
+        const filteredCtx = filteredCanvas.getContext('2d');
+        const grayscaleBtn = document.getElementById('grayscaleBtn');
+        const histogramEqBtn = document.getElementById('histogramEqBtn');
+        const meanFilterBtn = document.getElementById('meanFilterBtn');
+        const medianFilterBtn = document.getElementById('medianFilterBtn');
+        const gaussianFilterBtn = document.getElementById('gaussianFilterBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        let originalImageData = null;
+        let currentImage = new Image();
+
+        // Function to display messages to the user
+        function showMessage(message, type = 'info') {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden', 'bg-blue-100', 'border-blue-400', 'text-blue-700', 'bg-red-100', 'border-red-400', 'text-red-700');
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-100', 'border-red-400', 'text-red-700');
+            } else {
+                messageBox.classList.add('bg-blue-100', 'border-blue-400', 'text-blue-700');
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        // Function to hide the message box
+        function hideMessage() {
+            messageBox.classList.add('hidden');
+        }
+
+        // Handle image upload
+        imageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                fileNameSpan.textContent = `Đã chọn: ${file.name}`;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    currentImage.onload = () => {
+                        // Set canvas dimensions to match image
+                        originalCanvas.width = currentImage.width;
+                        originalCanvas.height = currentImage.height;
+                        filteredCanvas.width = currentImage.width;
+                        filteredCanvas.height = currentImage.height;
+
+                        // Draw original image
+                        originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+                        originalCtx.drawImage(currentImage, 0, 0);
+                        originalImageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+
+                        // Copy to filtered canvas initially
+                        filteredCtx.clearRect(0, 0, filteredCanvas.width, filteredCanvas.height);
+                        filteredCtx.drawImage(currentImage, 0, 0);
+                        hideMessage();
+                    };
+                    currentImage.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                fileNameSpan.textContent = 'Chưa có ảnh nào được chọn.';
+                originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
+                filteredCtx.clearRect(0, 0, filteredCanvas.width, filteredCanvas.height);
+                originalImageData = null;
+                showMessage("Vui lòng chọn một tệp ảnh.", "error");
+            }
+        });
+
+        // Function to convert image to grayscale
+        function toGrayscale(imageData) {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                data[i] = avg;     // Red
+                data[i + 1] = avg; // Green
+                data[i + 2] = avg; // Blue
+            }
+            return imageData;
+        }
+
+        // Histogram Equalization
+        function applyHistogramEqualization(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const numPixels = width * height;
+
+            // Step 1: Convert to grayscale and calculate histogram
+            // This filter is best applied on grayscale images.
+            // If the image is not already grayscale, convert it first.
+            const grayImageData = new ImageData(new Uint8ClampedArray(data), width, height);
+            toGrayscale(grayImageData); // Operate on a copy for grayscale conversion
+
+            const grayData = grayImageData.data;
+            const histogram = new Array(256).fill(0);
+
+            for (let i = 0; i < grayData.length; i += 4) {
+                histogram[grayData[i]]++; // Use R channel for grayscale value
+            }
+
+            // Step 2: Calculate CDF (Cumulative Distribution Function)
+            const cdf = new Array(256).fill(0);
+            cdf[0] = histogram[0];
+            for (let i = 1; i < 256; i++) {
+                cdf[i] = cdf[i - 1] + histogram[i];
+            }
+
+            // Normalize CDF to 0-255 range
+            const cdfMin = cdf.find(val => val > 0); // Find the first non-zero CDF value
+            if (!cdfMin) { // Handle case of completely uniform image
+                console.warn("Image has uniform intensity, histogram equalization may not be effective.");
+                return imageData; // Return original if no variation
+            }
+
+            const newImageData = new ImageData(new Uint8ClampedArray(data), width, height);
+            const newData = newImageData.data;
+
+            for (let i = 0; i < grayData.length; i += 4) {
+                const pixelValue = grayData[i];
+                const newPixelValue = Math.round(((cdf[pixelValue] - cdfMin) / (numPixels - cdfMin)) * 255);
+                newData[i] = newPixelValue;     // Red
+                newData[i + 1] = newPixelValue; // Green
+                newData[i + 2] = newPixelValue; // Blue
+                newData[i + 3] = grayData[i + 3]; // Alpha
+            }
+            return newImageData;
+        }
+
+        // Mean Filter (Averaging Filter)
+        function applyMeanFilter(imageData, kernelSize = 3) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const newImageData = new ImageData(new Uint8ClampedArray(data), width, height);
+            const newData = newImageData.data;
+            const halfKernel = Math.floor(kernelSize / 2);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0;
+                    let count = 0;
+
+                    for (let ky = -halfKernel; ky <= halfKernel; ky++) {
+                        for (let kx = -halfKernel; kx <= halfKernel; kx++) {
+                            const nx = x + kx;
+                            const ny = y + ky;
+
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                const index = (ny * width + nx) * 4;
+                                rSum += data[index];
+                                gSum += data[index + 1];
+                                bSum += data[index + 2];
+                                count++;
+                            }
+                        }
+                    }
+
+                    const currentIndex = (y * width + x) * 4;
+                    newData[currentIndex] = rSum / count;
+                    newData[currentIndex + 1] = gSum / count;
+                    newData[currentIndex + 2] = bSum / count;
+                    newData[currentIndex + 3] = data[currentIndex + 3]; // Preserve alpha
+                }
+            }
+            return newImageData;
+        }
+
+        // Median Filter
+        function applyMedianFilter(imageData, kernelSize = 3) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const newImageData = new ImageData(new Uint8ClampedArray(data), width, height);
+            const newData = newImageData.data;
+            const halfKernel = Math.floor(kernelSize / 2);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rValues = [], gValues = [], bValues = [];
+
+                    for (let ky = -halfKernel; ky <= halfKernel; ky++) {
+                        for (let kx = -halfKernel; kx <= halfKernel; kx++) {
+                            const nx = x + kx;
+                            const ny = y + ky;
+
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                const index = (ny * width + nx) * 4;
+                                rValues.push(data[index]);
+                                gValues.push(data[index + 1]);
+                                bValues.push(data[index + 2]);
+                            }
+                        }
+                    }
+
+                    rValues.sort((a, b) => a - b);
+                    gValues.sort((a, b) => a - b);
+                    bValues.sort((a, b) => a - b);
+
+                    const medianIndex = Math.floor(rValues.length / 2);
+
+                    const currentIndex = (y * width + x) * 4;
+                    newData[currentIndex] = rValues[medianIndex];
+                    newData[currentIndex + 1] = gValues[medianIndex];
+                    newData[currentIndex + 2] = bValues[medianIndex];
+                    newData[currentIndex + 3] = data[currentIndex + 3]; // Preserve alpha
+                }
+            }
+            return newImageData;
+        }
+
+        // Gaussian Filter
+        function applyGaussianFilter(imageData, kernelSize = 3, sigma = 1.0) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            const newImageData = new ImageData(new Uint8ClampedArray(data), width, height);
+            const newData = newImageData.data;
+            const halfKernel = Math.floor(kernelSize / 2);
+
+            // Generate Gaussian kernel
+            const kernel = [];
+            let kernelSum = 0;
+            for (let y = -halfKernel; y <= halfKernel; y++) {
+                const row = [];
+                for (let x = -halfKernel; x <= halfKernel; x++) {
+                    const value = (1 / (2 * Math.PI * sigma * sigma)) * Math.exp(-(x * x + y * y) / (2 * sigma * sigma));
+                    row.push(value);
+                    kernelSum += value;
+                }
+                kernel.push(row);
+            }
+
+            // Normalize kernel
+            for (let y = 0; y < kernelSize; y++) {
+                for (let x = 0; x < kernelSize; x++) {
+                    kernel[y][x] /= kernelSum;
+                }
+            }
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0;
+
+                    for (let ky = -halfKernel; ky <= halfKernel; ky++) {
+                        for (let kx = -halfKernel; kx <= halfKernel; kx++) {
+                            const nx = x + kx;
+                            const ny = y + ky;
+
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                const index = (ny * width + nx) * 4;
+                                const kernelValue = kernel[ky + halfKernel][kx + halfKernel];
+
+                                rSum += data[index] * kernelValue;
+                                gSum += data[index + 1] * kernelValue;
+                                bSum += data[index + 2] * kernelValue;
+                            }
+                        }
+                    }
+
+                    const currentIndex = (y * width + x) * 4;
+                    newData[currentIndex] = rSum;
+                    newData[currentIndex + 1] = gSum;
+                    newData[currentIndex + 2] = bSum;
+                    newData[currentIndex + 3] = data[currentIndex + 3]; // Preserve alpha
+                }
+            }
+            return newImageData;
+        }
+
+        // Event listeners for filter buttons
+        grayscaleBtn.addEventListener('click', () => {
+            if (!originalImageData) { showMessage("Vui lòng tải ảnh lên trước.", "error"); return; }
+            let imageDataCopy = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            const filteredImageData = toGrayscale(imageDataCopy);
+            filteredCtx.putImageData(filteredImageData, 0, 0);
+            showMessage("Đã áp dụng bộ lọc chuyển xám.");
+        });
+
+        histogramEqBtn.addEventListener('click', () => {
+            if (!originalImageData) { showMessage("Vui lòng tải ảnh lên trước.", "error"); return; }
+            let imageDataCopy = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            const filteredImageData = applyHistogramEqualization(imageDataCopy);
+            filteredCtx.putImageData(filteredImageData, 0, 0);
+            showMessage("Đã áp dụng bộ lọc cân bằng lược đồ xám.");
+        });
+
+        meanFilterBtn.addEventListener('click', () => {
+            if (!originalImageData) { showMessage("Vui lòng tải ảnh lên trước.", "error"); return; }
+            let imageDataCopy = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            const filteredImageData = applyMeanFilter(imageDataCopy);
+            filteredCtx.putImageData(filteredImageData, 0, 0);
+            showMessage("Đã áp dụng bộ lọc trung bình (3x3).");
+        });
+
+        medianFilterBtn.addEventListener('click', () => {
+            if (!originalImageData) { showMessage("Vui lòng tải ảnh lên trước.", "error"); return; }
+            let imageDataCopy = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            const filteredImageData = applyMedianFilter(imageDataCopy);
+            filteredCtx.putImageData(filteredImageData, 0, 0);
+            showMessage("Đã áp dụng bộ lọc trung vị (3x3).");
+        });
+
+        gaussianFilterBtn.addEventListener('click', () => {
+            if (!originalImageData) { showMessage("Vui lòng tải ảnh lên trước.", "error"); return; }
+            let imageDataCopy = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            const filteredImageData = applyGaussianFilter(imageDataCopy);
+            filteredCtx.putImageData(filteredImageData, 0, 0);
+            showMessage("Đã áp dụng bộ lọc Gaussian (3x3).");
+        });
+
+        resetBtn.addEventListener('click', () => {
+            if (originalImageData) {
+                originalCtx.putImageData(originalImageData, 0, 0); // Redraw original on original canvas
+                filteredCtx.putImageData(originalImageData, 0, 0); // Reset filtered canvas to original
+                showMessage("Đã đặt lại ảnh.");
+            } else {
+                showMessage("Không có ảnh để đặt lại.", "error");
+            }
+        });
+
+        // Initial setup for canvas size (responsive)
+        function resizeCanvases() {
+            const maxWidth = window.innerWidth * 0.4; // Max 40% of window width for each canvas
+            if (currentImage.width > 0 && currentImage.height > 0) {
+                const aspectRatio = currentImage.width / currentImage.height;
+                let newWidth = Math.min(maxWidth, currentImage.width);
+                let newHeight = newWidth / aspectRatio;
+
+                // If height exceeds max, adjust based on height
+                const maxHeight = window.innerHeight * 0.4;
+                if (newHeight > maxHeight) {
+                    newHeight = maxHeight;
+                    newWidth = newHeight * aspectRatio;
+                }
+
+                originalCanvas.style.width = `${newWidth}px`;
+                originalCanvas.style.height = `${newHeight}px`;
+                filteredCanvas.style.width = `${newWidth}px`;
+                filteredCanvas.style.height = `${newHeight}px`;
+            } else {
+                // Default size if no image loaded
+                originalCanvas.style.width = '300px';
+                originalCanvas.style.height = '200px';
+                filteredCanvas.style.width = '300px';
+                filteredCanvas.style.height = '200px';
+            }
+        }
+
+        // Call resize on load and window resize
+        window.addEventListener('load', resizeCanvases);
+        window.addEventListener('resize', resizeCanvases);
+    </script>
+</body>
+</html>
